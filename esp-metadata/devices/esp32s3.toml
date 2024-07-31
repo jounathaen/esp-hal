@@ -46,6 +46,7 @@ peripherals = [
     "systimer",
     "timg0",
     "timg1",
+    "touch",
     "twai0",
     "uart0",
     "uart1",

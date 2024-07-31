@@ -24,6 +24,8 @@
 //!
 //! Mostly feature complete, missing:
 //!
+//! - Advanced features like smoothing on esp32s2
+//! - async read() on esp32s2
 //! - Touch sensor slope control
 //! - Deep Sleep support (wakeup from Deep Sleep)
 
@@ -110,13 +112,22 @@ impl<'d, TOUCHMODE: TouchMode, MODE: Mode> Touch<'d, TOUCHMODE, MODE> {
         }
 
         // stop touch fsm
-        rtccntl
-            .state0()
-            .write(|w| w.touch_slp_timer_en().clear_bit());
-        // Disable touch interrupt
-        rtccntl.int_ena().write(|w| w.touch().clear_bit());
-        // Clear pending interrupts
-        rtccntl.int_clr().write(|w| w.touch().bit(true));
+        #[cfg(esp32)]
+        {
+            rtccntl
+                .state0()
+                .write(|w| w.touch_slp_timer_en().clear_bit());
+            // Disable touch interrupt
+            rtccntl.int_ena().write(|w| w.touch().clear_bit());
+            // Clear pending interrupts
+            rtccntl.int_clr().write(|w| w.touch().bit(true));
+        }
+        #[cfg(esp32s3)]
+        {
+            rtccntl
+                .touch_ctrl2()
+                .write(|w| w.touch_slp_timer_en().clear_bit());
+        }
 
         // Disable all interrupts and touch pads
         sens.sar_touch_enable().write(|w| unsafe {
@@ -533,7 +544,17 @@ mod asynch {
     use super::*;
     use crate::{macros::ram, prelude::handler, Async};
 
-    const NUM_TOUCH_PINS: usize = 8; // TODO
+    cfg_if::cfg_if! {
+        if #[cfg(esp32)] {
+            const NUM_TOUCH_PINS: usize = 10;
+        } else if #[cfg(any(esp32c2, esp32c3, esp32c6, esp32h2))] {
+            const NUM_TOUCH_PINS: usize = 0;
+        } else if #[cfg(esp32s2)] {
+            const NUM_TOUCH_PINS: usize = 10;
+        } else if #[cfg(esp32s3)] {
+            const NUM_TOUCH_PINS: usize = 14;
+        }
+    }
 
     #[allow(clippy::declare_interior_mutable_const)]
     const NEW_AW: AtomicWaker = AtomicWaker::new();
